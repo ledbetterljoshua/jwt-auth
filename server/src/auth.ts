@@ -16,7 +16,7 @@ export const createRefreshToken = (user: User): string => {
     { userId: user.id, tokenVersion: user.tokenVersion },
     REFRESH_TOKEN_SECRET!,
     {
-      expiresIn: "5m"
+      expiresIn: "7d"
     }
   );
 };

@@ -1,14 +1,26 @@
-import React from "react";
-import { useQuery } from "@apollo/react-hooks";
-import { gql } from "apollo-boost";
-import { useHelloQuery } from "./generated/graphql";
-// import helloQuery from './graphql/hello'
+import React, { useState, useEffect } from "react";
+import { Routes } from "./Routes";
+import { setAccessToken } from "./accessToken";
 
-const App: React.FC = () => {
-  const { data, loading } = useHelloQuery();
+interface Props {}
 
-  if (loading || !data) return <div>loading</div>;
-  return <div className="App">{data.hello}</div>;
+export const App: React.FC<Props> = () => {
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("http://localhost:4000/refresh_token", {
+      method: "POST",
+      credentials: "include"
+    }).then(async x => {
+      const { accessToken } = await x.json();
+      setAccessToken(accessToken);
+      setLoading(false);
+    });
+  }, []);
+
+  if (loading) {
+    return <div>loading...</div>;
+  }
+
+  return <Routes />;
 };
-
-export default App;

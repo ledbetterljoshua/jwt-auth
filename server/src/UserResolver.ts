@@ -9,35 +9,65 @@ import {
   UseMiddleware,
   Int
 } from "type-graphql";
-import { User } from "./entity/User";
 import { hash, compare } from "bcryptjs";
+import { User } from "./entity/User";
 import { MyContext } from "./types/context";
-import { createAccessToken, createRefreshToken } from "./auth";
+import { createRefreshToken, createAccessToken } from "./auth";
 import { isAuth } from "./isAuth";
-import { getConnection } from "typeorm";
 import { sendRefreshToken } from "./sendRefreshToken";
+import { getConnection } from "typeorm";
+import { verify } from "jsonwebtoken";
 
 @ObjectType()
 class LoginResponse {
   @Field()
   accessToken: string;
+  @Field(() => User)
+  user: User;
 }
 
 @Resolver()
 export class UserResolver {
   @Query(() => String)
   hello() {
-    return "hello there";
-  }
-  @Query(() => [User])
-  users() {
-    return User.find();
+    return "hi!";
   }
 
   @Query(() => String)
   @UseMiddleware(isAuth)
   bye(@Ctx() { payload }: MyContext) {
-    return `Your userId is ${payload!.userId}`;
+    console.log(payload);
+    return `your user id is: ${payload!.userId}`;
+  }
+
+  @Query(() => [User])
+  users() {
+    return User.find();
+  }
+
+  @Query(() => User, { nullable: true })
+  me(@Ctx() context: MyContext) {
+    const authorization = context.req.headers["authorization"];
+
+    if (!authorization) {
+      return null;
+    }
+
+    try {
+      const token = authorization.split(" ")[1];
+      const payload: any = verify(token, process.env.ACCESS_TOKEN_SECRET!);
+      return User.findOne(payload.userId);
+    } catch (err) {
+      console.log(err);
+      return null;
+    }
+  }
+
+  @Mutation(() => Boolean)
+  async logout(@Ctx() { res }: MyContext) {
+    sendRefreshToken(res, "");
+
+    return true;
   }
 
   @Mutation(() => Boolean)
@@ -55,24 +85,25 @@ export class UserResolver {
     @Arg("password") password: string,
     @Ctx() { res }: MyContext
   ): Promise<LoginResponse> {
-    if (!email || !password) {
-      throw new Error("You must provide an email and password");
-    }
     const user = await User.findOne({ where: { email } });
 
     if (!user) {
-      throw new Error(`No user found for ${email}`);
+      throw new Error("could not find user");
     }
-    const validPassword = await compare(password, user.password);
 
-    if (!validPassword) {
-      throw new Error(`password incorrect`);
+    const valid = await compare(password, user.password);
+
+    if (!valid) {
+      throw new Error("bad password");
     }
+
+    // login successful
 
     sendRefreshToken(res, createRefreshToken(user));
 
     return {
-      accessToken: createAccessToken(user)
+      accessToken: createAccessToken(user),
+      user
     };
   }
 
@@ -89,9 +120,10 @@ export class UserResolver {
         password: hashedPassword
       });
     } catch (err) {
-      console.error(err);
+      console.log(err);
       return false;
     }
+
     return true;
   }
 }
